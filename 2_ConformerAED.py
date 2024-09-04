@@ -10,13 +10,13 @@ import math
 import os
 import sys
 
-sys.path.append('./asr_helper')
 from Conformer import ConformerEncoderLayer, ConformerEncoder
 from Transformer import CustomTransformerDecoderLayer, CustomTransformerDecoder
 from RNNT import _TimeReduction
 from Embedding import PositionalEncoding
 import S4T as S
 
+# Data augmentation
 TRANSFORM = nn.Sequential(torchaudio.transforms.MelSpectrogram(sample_rate = 16000,
                                                                  n_fft = 512,
                                                                  win_length = 400,
@@ -28,7 +28,7 @@ TRAIN_TRANSFORM = torchaudio.transforms.SpecAugment(n_time_masks = 10,
                                       n_freq_masks = 1,
                                       freq_mask_param = 27)
 
-#
+# special token indexes
 PAD_IDX = 0
 UNK_IDX = 1
 BOS_IDX = 2
@@ -62,22 +62,41 @@ class VectorizeChar:
         return text
 
 class LibriSpeech(torch.utils.data.Dataset):
-    def __init__(self, root, subset = 'train'):
+    """
+    LibriSpeech Dataset.
+
+    Parameters:
+    root: str - Path to the directory where the dataset is found or downloaded.
+    subset: str - The type of the dataset (e.g. 'train-clean-100').
+    """
+    def __init__(self, 
+                 root: str, 
+                 subset: str = 'train'):
         super().__init__()
         self.subset = subset
         self.dataset = torchaudio.datasets.LIBRISPEECH(root, url = subset)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
+        """
+        Parameters:
+        idx: int - The index of the sample to be loaded
+        Returns:
+        Tuple of (Tensor, string)
+        """
         wav, _, text, *_ = self.dataset[idx]
         wav = TRANSFORM(wav)
         if 'train' in self.subset:
             wav = TRAIN_TRANSFORM(wav)
         return wav, text
 
-    def __len__(self):
-        return len(self.dataset)
-
 class LS460(S.SDataModule):
+    """
+    Dataloader of Librispeech dataset 460h.
+    
+    Parameters:
+    root: str - Path to the directory where the dataset is found or downloaded.
+    batch_size: int - The number of samples per mini-batch.
+    """
     def __init__(self, root, batch_size):
         super().__init__()
         self.root = root
@@ -123,6 +142,14 @@ class LS460(S.SDataModule):
                                            pin_memory = True)
 
     def collate_fn(self, batch):
+        """
+        Processing the list of samples to batch.
+        Returns:
+        Tuple of the following items:
+            Tensor - Batch of source spectrograms.
+            Tensor - Batch of encoded labels.
+            Tensor - The lengths of source spectrograms in batch.
+        """
         src_batch, src_lengths, tgt_batch = [], [], []
         for src_sample, tgt_sample in batch:
             tgt_sample = torch.tensor(self.tokenizer(tgt_sample.lower()))
@@ -136,6 +163,20 @@ class LS460(S.SDataModule):
         return src_batch, tgt_batch.type(torch.long), src_lengths.type(torch.long)
 
 class _ConformerEncoder(nn.Module):
+    """
+    Encoder or Transcriber of model used Conformer to extract informations.
+
+    Parameters:
+    input_dim: int - The input dimension.
+    output_dim: int - The output dimention.
+    time_reduction_stride: int - The number of frames will be concatenated.
+    conformer_input_dim: int - The embedding dimension.
+    conformer_ffn_dim: int - The dimention of the feedforward network.
+    conformer_num_layers: int - The number of sub-encoder-layers.
+    conformer_num_heads: int - The number of heads in the multiheadattention models.
+    conformer_depthwise_conv_kernel_size: int - The kernel size of convolution layers.
+    conformer_dropout: float - The dropout value
+    """
     def __init__(self,
                  input_dim: int,
                  output_dim: int,
@@ -163,8 +204,9 @@ class _ConformerEncoder(nn.Module):
                 input: torch.Tensor,
                 lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        input: (N, T, D)
-        length: (N,)
+        Paramameters:
+        input: Tensor - Audio features, shape (N, T, D).
+        length: Tensor - Correspoding Lengths of the audio features, shape (N,)
         """
         time_reduction_out, time_reduction_lengths = self.time_reduction(input, lengths)
         input_linear_out = self.input_linear(time_reduction_out)
@@ -174,7 +216,16 @@ class _ConformerEncoder(nn.Module):
         return layer_norm_out, key_padding_mask
 
 class TokenEmbedding(nn.Module):
-    def __init__(self, vocab_size, emb_size):
+    """
+    Token embedding module.
+
+    Parameters:
+    vocab_size: int - The size of vocabulary.
+    emb_size: int - The embedding size.
+    """
+    def __init__(self, 
+                 vocab_size: int, 
+                 emb_size: int):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, emb_size)
         self.emb_size = emb_size
@@ -183,11 +234,23 @@ class TokenEmbedding(nn.Module):
         return self.embedding(tokens.long())*math.sqrt(self.emb_size)
 
 def generate_square_subsequent_mask(sz):
+    """
+    Making causal mask for cross-attention layers.
+
+    Parameters:
+    sz: int: The number of tokens in the taget sequence.
+    """
     mask = (torch.triu(torch.ones((sz, sz))) == 1).transpose(0, 1)
     mask = mask.masked_fill(mask == 0, True).masked_fill(mask == 1, False).type(torch.bool)
     return mask
 
 def create_tgt_mask(tgt):
+    """
+    Create mask for attention layers, including padding mask, and causal mask.
+
+    Parameters:
+    tgt: Tensor - The targets, shape (N, T, D) 
+    """
     tgt_seq_len = tgt.shape[1]
 
     tgt_mask = generate_square_subsequent_mask(tgt_seq_len)
@@ -196,13 +259,24 @@ def create_tgt_mask(tgt):
     return tgt_mask.to(tgt.device), tgt_padding_mask.to(tgt.device)
 
 class _TransformerDecoder(nn.Module):
+    """
+    Transformer Decoder
+
+    Parameters:
+    vocab_size: int - The size of the vocabulary.
+    num_hiddens: int - The number of expected features in the target.
+    ffn_num_hiddens: int - The dimension of the feedforward network.
+    num_heads: int - The number of heads in the multiheadattention models.
+    num_blks: int - The number of the transformer decoder layer.
+    dropout: float - The dropout value.
+    """
     def __init__(self,
                  vocab_size: int,
                  num_hiddens: int,
                  ffn_num_hiddens: int,
                  num_heads: int,
                  num_blks: int,
-                 dropout = 0.1):
+                 dropout: float = 0.1):
         super().__init__()
         self.num_hiddens = num_hiddens
         self.vocab_size = vocab_size
@@ -226,6 +300,26 @@ class _TransformerDecoder(nn.Module):
                                         memory_key_padding_mask)
 
 class ConformerAED(nn.Module):
+    """
+    Attention-based Encoder-Decoder ASR using Conformer as Encoder.
+    
+    Parameters:
+    input_dim: int - The input dimension.
+    output_dim: int - The output dimention.
+    time_reduction_stride: int - The number of frames will be concatenated.
+    conformer_input_dim: int - The embedding dimension.
+    conformer_ffn_dim: int - The dimention of the feedforward network.
+    conformer_num_layers: int - The number of sub-encoder-layers.
+    conformer_num_heads: int - The number of heads in the multiheadattention models.
+    conformer_depthwise_conv_kernel_size: int - The kernel size of convolution layers.
+    conformer_dropout: float - The dropout value.
+    vocab_size: int - The size of the vocabulary.
+    decoder_input_dim: int - The number of expected features in the target.
+    decoder_ffn_dim: int - The dimension of the feedforward network.
+    decoder_num_heads: int - The number of heads in the multiheadattention models.
+    decoder_num_layers: int - The number of the transformer decoder layer.
+    decoder_dropout: float - The dropout value.
+    """
     def __init__(self,
                  input_dim: int,
                  time_reduction_stride: int,
@@ -271,7 +365,6 @@ class ConformerAED(nn.Module):
                 tgt_mask: Optional[torch.Tensor] = None,
                 tgt_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
-
         src: shape (N, Ts, F)
         tgt: shape (N, Tt)
         """
@@ -289,7 +382,10 @@ class ConformerAED(nn.Module):
                  src: torch.Tensor,
                  src_lengths: Optional[torch.Tensor],
                  max_tgt_lengths: int = 400,
-                start_symbol: int = 0):
+                 start_symbol: int = 0):
+        """
+        Generating output given audio feature.
+        """
         memory, memory_key_padding_mask = self.encoder(src, src_lengths)
         if self.conformer_output_dim != self.decoder_input_dim:
             memory = self.cross_linear(memory)
@@ -405,6 +501,16 @@ def transcribe(model: Callable,
                src: torch.Tensor,
                src_lengths: Optional[torch.Tensor] = None,
                max_tgt_lengths: int = 400):
+    """
+    Transcribing audio to text.
+
+    Parameters:
+    model: Callable - Transformer-Transducer Model.
+    tokenizer: Callable - Tokenizer.
+    src: Tensor - Input audio features.
+    src_lengths: Optional[Tensor] - The correspoding lengths of the audio features.
+    max_tgt_lengths: int - The maximum target lengths for prediction.
+    """
     model.eval()
     tgt_tokens = model.generate(src, src_lengths, max_tgt_lengths, BOS_IDX)
     return tokenizer.itos(tgt_tokens)

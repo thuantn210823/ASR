@@ -7,22 +7,21 @@ import torchmetrics
 
 import os
 
-import torchmetrics.text
-
-sys.path.append('./asr_helper')
 from Conformer import ConformerEncoderLayer, ConformerEncoder
 from RNNT import _TimeReduction, _Predictor, _Joiner, RNNT
 from Tokenizer import BPETokenizer
 import S4T as S
 
+# define device
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-device
 
+# special token indexes
 PAD_IDX = 0
 UNK_IDX = 1
 BOS_IDX = 2
 EOS_IDX = 3
 
+# Data augmentation
 TRANSFORM = nn.Sequential(torchaudio.transforms.MelSpectrogram(sample_rate = 16000,
                                                                  n_fft = 512,
                                                                  win_length = 400,
@@ -35,12 +34,27 @@ TRAIN_TRANSFORM = torchaudio.transforms.SpecAugment(n_time_masks = 10,
                                       freq_mask_param = 27)
 
 class LibriSpeech(torch.utils.data.Dataset):
-    def __init__(self, root, subset = 'train'):
+    """
+    LibriSpeech Dataset.
+
+    Parameters:
+    root: str - Path to the directory where the dataset is found or downloaded.
+    subset: str - The type of the dataset (e.g. 'train-clean-100').
+    """
+    def __init__(self, 
+                 root: str, 
+                 subset: str = 'train'):
         super().__init__()
         self.subset = subset
         self.dataset = torchaudio.datasets.LIBRISPEECH(root, url = subset)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
+        """
+        Parameters:
+        idx: int - The index of the sample to be loaded
+        Returns:
+        Tuple of (Tensor, string)
+        """
         wav, _, text, *_ = self.dataset[idx]
         wav = TRANSFORM(wav)
         if 'train' in self.subset:
@@ -48,10 +62,23 @@ class LibriSpeech(torch.utils.data.Dataset):
         return wav, text
 
     def __len__(self):
+        """
+        Returns:
+        The number of samples that the dataset holds
+        """
         return len(self.dataset)
 
 class LS460(S.SDataModule):
-    def __init__(self, root, batch_size):
+    """
+    Dataloader of Librispeech dataset 460h.
+    
+    Parameters:
+    root: str - Path to the directory where the dataset is found or downloaded.
+    batch_size: int - The number of samples per mini-batch.
+    """
+    def __init__(self, 
+                 root: str, 
+                 batch_size: int):
         super().__init__()
         self.root = root
         self.batch_size = batch_size
@@ -64,6 +91,7 @@ class LS460(S.SDataModule):
                                subset = 'dev-clean')
         self.test_dataset = LibriSpeech(root,
                                 subset = 'test-clean')
+        # I used BPE for tokenization
         self.tokenizer = BPETokenizer('./asr_helper/BPEvocab512.pkl',
                                       './asr_helper/BPEsplits512.pkl',
                                       './asr_helper/BPEmerges512.pkl')
@@ -96,7 +124,16 @@ class LS460(S.SDataModule):
                                            prefetch_factor = 1,
                                            pin_memory = True)
 
-    def collate_fn(self, batch):
+    def collate_fn(self, batch: list):
+        """
+        Processing the list of samples to batch.
+        Returns:
+        Tuple of the following items:
+            Tensor - Batch of source spectrograms.
+            Tensor - Batch of encoded labels.
+            Tensor - The lengths of source spectrograms in batch.
+            Tensor - The lengths of labels in batch.
+        """
         src_batch, src_lengths, tgt_batch, tgt_lengths = [], [], [], []
         for src_sample, tgt_sample in batch:
             tgt_sample = torch.tensor(self.tokenizer(tgt_sample))
@@ -112,6 +149,20 @@ class LS460(S.SDataModule):
         return src_batch, tgt_batch.type(torch.int32), src_lengths.type(torch.int32), tgt_lengths.type(torch.int32)
 
 class _ConformerEncoder(nn.Module):
+    """
+    Encoder or Transcriber of model used Conformer to extract informations.
+
+    Parameters:
+    input_dim: int - The input dimension.
+    output_dim: int - The output dimention.
+    time_reduction_stride: int - The number of frames will be concatenated.
+    conformer_input_dim: int - The embedding dimension.
+    conformer_ffn_dim: int - The dimention of the feedforward network.
+    conformer_num_layers: int - The number of sub-encoder-layers.
+    conformer_num_heads: int - The number of heads in the multiheadattention models.
+    conformer_depthwise_conv_kernel_size: int - The kernel size of convolution layers.
+    conformer_dropout: float - The dropout value
+    """
     def __init__(self,
                  input_dim: int,
                  output_dim: int,
@@ -139,8 +190,9 @@ class _ConformerEncoder(nn.Module):
                 input: torch.Tensor,
                 lengths: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        input: (N, T, D)
-        length: (N,)
+        Paramameters:
+        input: Tensor - Audio features, shape (N, T, D).
+        length: Tensor - Correspoding Lengths of the audio features, shape (N,)
         """
         time_reduction_out, time_reduction_lengths = self.time_reduction(input, lengths)
         input_linear_out = self.input_linear(time_reduction_out)
@@ -150,6 +202,28 @@ class _ConformerEncoder(nn.Module):
         return layer_norm_out, lengths
 
 class ConformerTransducer(RNNT):
+    """
+    Transformer-Transducer ASR model using Conformer as the encoder.
+    
+    Parameters:
+    input_dim: int - The input dimension.
+    output_dim: int - The output dimention.
+    time_reduction_stride: int - The number of frames will be concatenated.
+    conformer_input_dim: int - The embedding dimension.
+    conformer_ffn_dim: int - The dimention of the feedforward network.
+    conformer_num_layers: int - The number of sub-encoder-layers.
+    conformer_num_heads: int - The number of heads in the multiheadattention models.
+    conformer_depthwise_conv_kernel_size: int - The kernel size of convolution layers.
+    conformer_dropout: float - The dropout value
+    num_symbols: int - The size of vocabulary.
+    symbol_embedding_dim: The embedding dimension of the embedding layer.
+    num_lstm_layers: int - The number of LSTM cells.
+    lstm_hidden_dim: int - The hidden dimension of LSTM cell.
+    lstm_layer_norm: bool - Whether using Layer Norm or not.
+    lstm_layer_norm_epsilon: float - Layer Norm epsilon
+    lstm_dropout: float - LSTM dropout value.
+    joiner_activation: str - The activation used in joiner.
+    """
     def __init__(self,
                  input_dim: int,
                  output_dim: int,
@@ -169,23 +243,24 @@ class ConformerTransducer(RNNT):
                  lstm_dropout: float = 0.0,
                  joiner_activation: str = 'relu') -> None:
         transcriber = _ConformerEncoder(input_dim,
-                                             output_dim,
-                                             time_reduction_stride,
-                                             conformer_input_dim,
-                                             conformer_ffn_dim,
-                                             conformer_num_layers,
-                                             conformer_num_heads,
-                                             conformer_depthwise_conv_kernel_size,
-                                             conformer_dropout).to('cuda:0')
+                                        output_dim,
+                                        time_reduction_stride,
+                                        conformer_input_dim,
+                                        conformer_ffn_dim,
+                                        conformer_num_layers,
+                                        conformer_num_heads,
+                                        conformer_depthwise_conv_kernel_size,
+                                        conformer_dropout).to('cuda:0')
         predictor = _Predictor(num_symbols,
-                                    output_dim,
-                                    symbol_embedding_dim,
-                                    num_lstm_layers,
-                                    lstm_hidden_dim,
-                                    lstm_layer_norm,
-                                    lstm_layer_norm_epsilon,
-                                    lstm_dropout).to('cuda:0')
-        joiner = _Joiner(output_dim, num_symbols, activation = joiner_activation).to('cuda:1')
+                               output_dim,
+                               symbol_embedding_dim,
+                               num_lstm_layers,
+                               lstm_hidden_dim,
+                               lstm_layer_norm,
+                               lstm_layer_norm_epsilon,
+                               lstm_dropout).to('cuda:0')
+        joiner = _Joiner(output_dim, num_symbols, 
+                         activation = joiner_activation).to('cuda:1')
         super().__init__(transcriber,
                          predictor,
                          joiner)
@@ -231,6 +306,9 @@ class ConformerTransducer(RNNT):
                  input: torch.Tensor, 
                  input_lengths: torch.Tensor,
                  max_tgt_lengths: torch.Tensor = 400):
+        """
+        Generating output given audio feature.
+        """
         y_batch = []
         B = len(input)
         enc_out, enc_lengths = self.transcriber(input, input_lengths)
@@ -402,6 +480,16 @@ def transcribe(model: Callable,
                src: torch.Tensor,
                src_lengths: torch.Tensor,
                max_tgt_lengths: int):
+    """
+    Transcribing audio to text.
+
+    Parameters:
+    model: Callable - Transformer-Transducer Model.
+    tokenizer: Callable - Tokenizer.
+    src: Tensor - Input audio features.
+    src_lengths: Tensor - The correspoding lengths of the audio features.
+    max_tgt_lengths: int - The maximum target lengths for prediction.
+    """
     model.eval()
     texts = []
     token_outs = model.generate(src, src_lengths, max_tgt_lengths)

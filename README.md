@@ -43,6 +43,7 @@ Papers:
 Other works, and tutorials:
 - <https://keras.io/examples/audio/transformer_asr/>
 - <https://github.com/park-cheol/ASR-Conformer/tree/master>
+- <https://lorenlugosch.github.io/posts/2020/11/transducer/>
 - <https://pytorch.org/audio/main/_modules/torchaudio/prototype/models/rnnt.html#conformer_rnnt_model>
 - <https://huggingface.co/learn/nlp-course/chapter6/5>
 

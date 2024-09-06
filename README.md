@@ -39,11 +39,13 @@ Papers:
 - Gulati, Anmol, et al. "Conformer: Convolution-augmented transformer for speech recognition." arXiv preprint arXiv:2005.08100 (2020).
 - Dong, Linhao, Shuang Xu, and Bo Xu. "Speech-transformer: a no-recurrence sequence-to-sequence model for speech recognition." 2018 IEEE international conference on acoustics, speech and signal processing (ICASSP). IEEE, 2018.
 - Dai, Zihang, et al. "Transformer-xl: Attentive language models beyond a fixed-length context." arXiv preprint arXiv:1901.02860 (2019).
+
 Other works, and tutorials:
 - <https://keras.io/examples/audio/transformer_asr/>
 - <https://github.com/park-cheol/ASR-Conformer/tree/master>
 - <https://pytorch.org/audio/main/_modules/torchaudio/prototype/models/rnnt.html#conformer_rnnt_model>
 - <https://huggingface.co/learn/nlp-course/chapter6/5>
+
 Data Parallel, and Model Parallel tutorials:
 - <https://pytorch.org/tutorials/intermediate/model_parallel_tutorial.html#speed-up-by-pipelining-inputs>
 - <https://pytorch.org/tutorials/beginner/blitz/data_parallel_tutorial.html#create-model-and-dataparallel>

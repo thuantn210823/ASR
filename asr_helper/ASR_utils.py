@@ -1,17 +1,9 @@
 import torch
 from torch import nn
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
 import os
-import sys
-import shutil
 import tarfile
 from zipfile import ZipFile
-
-import IPython.display as ipd
 
 from torchaudio._internal import download_url_to_file
 

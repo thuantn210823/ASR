@@ -1,8 +1,0 @@
-lightning
-torch
-torchaudio
-torchmetrics
-numpy
-pandas
-zipfile
-

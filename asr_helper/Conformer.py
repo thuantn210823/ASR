@@ -1,11 +1,9 @@
-from typing import Tuple, List, Optional, Callable
+from typing import Tuple, Optional
 
 import torch
 from torch import nn
 
-import numpy as np
-
-from Attention import RelPartialLearnableMultiheadAttn, RelMultiheadAttention
+from .Attention import RelPartialLearnableMultiheadAttn
 
 import copy
 
@@ -137,16 +135,20 @@ class ConformerEncoderLayer(nn.Module):
                  ffn_dim: int,
                  num_heads: int,
                  kernel_size: int,
-                 dropout: float = 0.0) -> None:
+                 dropout: float = 0.0,
+                 rel_attn: bool = False) -> None:
         super().__init__()
         self.input_dim = input_dim
-
+        self.ffn_dim = ffn_dim
+        self.num_heads = num_heads
+        self.kernel_size = kernel_size
         self.ffn1 = _FeedForwardModule(input_dim,
                                        ffn_dim,
                                        dropout)
         self.selfattn = _MulHeadAttnModule(input_dim,
                                            num_heads,
-                                          dropout)
+                                          dropout,
+                                          relattn = rel_attn)
         self.conv = _ConvolutionModule(input_dim,
                                        input_dim,
                                        kernel_size = kernel_size,

@@ -1,12 +1,11 @@
-from typing import Optional, Callable, Tuple, List
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
 
 import math
 
-from ASR_utils import _init_weight
-from Embedding import PositionalEmbedding
+from .Embedding import PositionalEmbedding
 
 def masked_softmax(x: torch.Tensor, 
                    key_padding_mask: Optional[torch.Tensor] = None,
@@ -50,8 +49,7 @@ class MultiheadAttention(nn.Module):
                  embed_dim: int,
                  num_heads: int,
                  dropout: float = 0.0,
-                 bias: bool = True,
-                 init_weight: bool = True):
+                 bias: bool = True):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -61,11 +59,6 @@ class MultiheadAttention(nn.Module):
         self.Wk = nn.Linear(embed_dim, embed_dim, bias = bias)
         self.Wv = nn.Linear(embed_dim, embed_dim, bias = bias)
         self.attention = ScaledDotProductAttention(dropout)
-
-        if init_weight:
-            _init_weight(self.Wq)
-            _init_weight(self.Wk)
-            _init_weight(self.Wv)
 
     def forward(self, 
                 query: torch.Tensor, 
@@ -102,8 +95,7 @@ class RelMultiheadAttention(nn.Module):
                  embed_dim: int,
                  num_heads: int,
                  dropout: float = 0.0,
-                 bias: bool = True,
-                 init_weight: bool = True) -> None:
+                 bias: bool = True) -> None:
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -120,12 +112,6 @@ class RelMultiheadAttention(nn.Module):
         self.U_bias = nn.Parameter(torch.Tensor(num_heads, self.attn_dim))
         self.V_bias = nn.Parameter(torch.Tensor(num_heads, self.attn_dim))
         
-        if init_weight:
-            _init_weight(self.W_query)
-            _init_weight(self.W_key)
-            _init_weight(self.W_value)
-            _init_weight(self.W_relpos)
-            _init_weight(self.W_out)
         nn.init.xavier_uniform_(self.U_bias)
         nn.init.xavier_uniform_(self.V_bias)
 

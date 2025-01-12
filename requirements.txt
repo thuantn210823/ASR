@@ -1,8 +1,4 @@
-lightning
+numpy
 torch
 torchaudio
-torchmetrics
-numpy
-pandas
-zipfile
-
+librosa

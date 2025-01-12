@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+import math
+
 class PositionalEmbedding(nn.Module):
     def __init__(self,
                  embed_dim: int,
@@ -37,3 +39,12 @@ class PositionalEncoding(nn.Module):
     def forward(self, X):
         X = X + self.P[:, :X.shape[1], :].to(X.device)
         return self.dropout(X)
+
+class TokenEmbedding(nn.Module):
+    def __init__(self, vocab_size, emb_size):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, emb_size)
+        self.emb_size = emb_size
+
+    def forward(self, tokens):
+        return self.embedding(tokens.long())*math.sqrt(self.emb_size)

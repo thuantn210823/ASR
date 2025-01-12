@@ -2,7 +2,6 @@ from typing import Optional, Callable, Tuple, List
 
 import torch
 from torch import nn
-import torchaudio
 
 class _TimeReduction(nn.Module):
     """

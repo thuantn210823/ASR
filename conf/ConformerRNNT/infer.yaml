@@ -1,7 +1,7 @@
 tokenizer: BPE
-vocab_path: pretrained\BPEvocab512_960.pkl
-splits_path: pretrained\BPEsplits512_960.pkl
-merges_path: pretrained\BPEmerges512_960.pkl
+vocab_path: pretrained/BPEvocab512_960.pkl
+splits_path: pretrained/BPEsplits512_960.pkl
+merges_path: pretrained/BPEmerges512_960.pkl
 model: ConformerRNNT
 input_dim: 80
 output_dim: 256
@@ -16,7 +16,7 @@ num_lstm_layers: 1
 lstm_hidden_dim: 320
 lstm_layer_norm: true
 joiner_activation: tanh
-ckpt_path: pretrained\conformer_rnnt-bpe-librispeech.ckpt
+ckpt_path: pretrained/conformer_rnnt-bpe-librispeech.ckpt
 sample_rate: 16000
 n_fft: 512
 win_length: 400

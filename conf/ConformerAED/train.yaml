@@ -3,9 +3,9 @@ size: 960
 download: true
 batch_size: 16
 tokenizer: BPE
-vocab_path: pretrained\BPEvocab512_960.pkl
-splits_path: pretrained\BPEsplits512_960.pkl
-merges_path: pretrained\BPEmerges512_960.pkl
+vocab_path: pretrained/BPEvocab512_960.pkl
+splits_path: pretrained/BPEsplits512_960.pkl
+merges_path: pretrained/BPEmerges512_960.pkl
 pad_idx: 0
 unk_idx: 1
 bos_idx: 2

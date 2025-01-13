@@ -41,7 +41,7 @@ py infer.py --config_yaml conf/ConformerAED/train.yaml --audio_path example/1089
 `Note:` Some arguments in these `train.yaml` files are still left blank waiting for you to complete. 
 
 Here is what you should get for the inference run above: 
-```sh
+```
 Transcribed: the chaos in which his ardour extinguished itself was a cold indifferent knowledge of himself
 ```
 

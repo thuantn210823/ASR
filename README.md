@@ -36,7 +36,7 @@ py train.py --config_yaml conf/ConformerAED/train.yaml
 ```
 ```sh
 cd ASR
-py infer.py --config_yaml conf/ConformerAED/train.yaml --audio_path example/1089-134686-0008.flac
+py infer.py --config_yaml conf/ConformerAED/infer.yaml --audio_path example/1089-134686-0008.flac
 ```
 `Note:` Some arguments in these `train.yaml` files are still left blank waiting for you to complete. 
 
